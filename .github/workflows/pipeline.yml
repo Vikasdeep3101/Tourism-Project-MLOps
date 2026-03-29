@@ -1,0 +1,47 @@
+name: Tourism Project Pipeline
+
+on:
+  push:
+    branches:
+      - main  # Triggers automatically on push to main
+
+jobs:
+  register-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install HF Hub
+        run: pip install huggingface_hub
+      - name: Upload Dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "from huggingface_hub import HfApi; api = HfApi(); api.upload_file(path_or_fileobj='tourism_project/data/raw_data.csv', path_in_repo='data.csv', repo_id='Vikas3101/TourismDataset', repo_type='dataset', token='${{ secrets.HF_TOKEN }}')"
+
+  model-training:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: pip install pandas scikit-learn xgboost joblib mlflow
+      - name: Train and Save Model
+        run: python tourism_project/scripts/train_model.py
+      - name: Archive Model
+        uses: actions/upload-artifact@v3
+        with:
+          name: trained-model
+          path: tourism_project/deployment/model_building/model.pkl
+
+  deploy-hosting:
+    needs: model-training
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install HF Hub
+        run: pip install huggingface_hub
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "from huggingface_hub import HfApi; api = HfApi(); api.upload_folder(folder_path='tourism_project/deployment', repo_id='Vikas3101/VisitWithUS', repo_type='space', token='${{ secrets.HF_TOKEN }}')"
